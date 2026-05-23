@@ -9,8 +9,54 @@ using namespace std;
 int estado_activacion(double valor){
     return valor>=0?1:0;
 }
+vector<vector<double>> pesos(784,vector<double>(10,0));
+vector<double> bias(10,0);
+int entrenar(vector<vector<int>> matriz_muestra, 
+             vector<vector<int>> matriz_etiquetas,
+             int epocas, 
+             double tasa){
+    
+    for(int i=0,i<epocas;i++){
+        vector<bool> y(10,0);
+        for (int j = 0; j < 60000; j++)
+        {
+            vector<double> total_peso_caracteristica(10,0);
+            for (int m = 0; m < 10; m++)
+            {
+                for (int k = 1; k < 785; k++)
+                {
+                    
+                    total_peso_caracteristica[matriz_muestra[j][0]] += matriz_muestra[j][k]*pesos[k-1][matriz_muestra[j][0]];
+                    
+                }
 
-int entrenar(vector<vector<int>> matriz_muestra,vector<vector<int>> matriz_etiquetas, int epocas, float tasa)
+                if(total_peso_caracteristica[matriz_muestra[j][0]] + bias[m]>=0){
+                    y[matriz_muestra[m][0]] = 1
+                }else{
+                    y[matriz_muestra[m][0]] = 0
+                }
+                int error = y[matriz_muestra[j][0]] - y[matriz_muestra[j][0]]
+                bias[m]   +=  tasa*error
+                for (int k = 0; k < 784; k++)
+                {
+                    if(matriz_etiquetas[j][m]!=y[matriz_muestra[j][0]]){
+
+                        pesos[k][matriz_muestra[j][0]]+= error*tasa*matriz_muestra[j][k+1];
+
+                    }
+                }
+            }
+            
+
+            
+        }
+        
+    }
+    
+
+
+
+}
 vector<int> split(string texto, char delimitador){
     vector<int> vec;
     stringstream entrada(texto);

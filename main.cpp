@@ -22,41 +22,34 @@ void entrenar(vector<vector<double>> matriz_input,
              double tasa){
     
     for(int i=0;i<epocas;i++){
-        vector<bool> y(10,0);
+        vector<double> y(10,0.0);
         for (int j = 0; j < 60000; j++)
         {
             vector<double> total_peso_input(10,0);
 
             for (int m = 0; m < 10; m++)
             {
-                for (int k = 1; k < 785; k++)
-                {
-                    //pesos tiene el orden de input x clase 
-                    total_peso_input[m] += matriz_input[j][k]*pesos[k-1][m];
-                    
-                }
-
+                double suma = bias[m];
+                for (int k = 0; k < 784; k++)
+                    suma += matriz_input[j][k+1] * pesos[k][m];
+                y[m] = f_activacion(suma);
+            }
                 
-                y[m]=f_activacion(total_peso_input[m] + bias[m]);
-
-                double error =  matriz_clase[j][m] - y[m] ;
-
-                bias[m] +=  tasa * error;
+            for (int m = 0; m < 10; m++) {
+                double error = matriz_clase[j][m] - y[m];
+                double delta = error * y[m] * (1.0 - y[m]);
+                bias[m] += tasa * error;
 
                 for (int k = 0; k < 784; k++)
-                {
-                    pesos[k][m]+= error*tasa*matriz_input[j][k+1];
-
-                }
+                    pesos[k][m] += tasa * delta * matriz_input[j][k+1];
             }
-            
 
             
         }
         
     }
     cout<<"dsds"<<endl;
-    ofstream archivo("pesos.txt",std::ios::app);
+    ofstream archivo("pesos.txt");
     for (int i = 0; i < 784; i++)
     {
         for (int j = 0; j < 10; j++)
@@ -70,7 +63,7 @@ void entrenar(vector<vector<double>> matriz_input,
     }
     archivo.close();
 
-    ofstream archivo2("bias.txt",std::ios::app);
+    ofstream archivo2("bias.txt");
     for (int i = 0; i < 10; i++)
     {
         archivo2<<bias[i];
@@ -105,6 +98,7 @@ vector<vector<double>> normalizar(vector<vector<double>> matriz,int offset){
     vector<vector<double>> matriz_norma(matriz.size(),vector<double>(matriz[0].size(),0));
     for (int i = 0; i < matriz.size(); i++)
     {
+        matriz_norma[i][0] = matriz[i][0];  
         for (int j = 0 + offset; j < matriz[0].size(); j++)
         {
             if(matriz[i][j]>0)
@@ -143,7 +137,7 @@ int main(){
     cout<<matriz_clase[0][0]<<endl;
     archivo.close();
 
-    entrenar(entrada_matriz,matriz_clase,1,0.001);
+    entrenar(entrada_matriz,matriz_clase,5,0.001);
 
     return 0;
 }

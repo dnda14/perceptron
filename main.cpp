@@ -5,6 +5,8 @@
 #include <sstream>
 #include <ctime>
 #include <cmath>
+#include <thread>
+#include <algorithm>
 
 using namespace std;
 
@@ -15,6 +17,103 @@ vector<vector<double>> pesos(784,vector<double>(10));
 
 vector<double> bias(10,0);
 
+struct Gradientes {
+    vector<vector<double>> dpesos;
+    vector<double> dbias;
+};
+
+void acumular_gradientes(int desde, int hasta,
+                         const vector<vector<double>>& matriz_input,
+                         const vector<vector<int>>& matriz_clase,
+                         const vector<vector<double>>& pesos_loc,
+                         const vector<double>& bias_loc,
+                         Gradientes& grad) {
+    grad.dpesos.assign(784, vector<double>(10, 0.0));
+    grad.dbias.assign(10, 0.0);
+
+    for (int j = desde; j < hasta; j++) {
+        vector<double> y(10);
+        for (int m = 0; m < 10; m++) {
+            double suma = bias_loc[m];
+            for (int k = 0; k < 784; k++)
+                suma += matriz_input[j][k + 1] * pesos_loc[k][m];
+            y[m] = f_activacion(suma);
+        }
+        for (int m = 0; m < 10; m++) {
+            double error = matriz_clase[j][m] - y[m];
+            double delta = error * y[m] * (1.0 - y[m]);
+            grad.dbias[m] += delta;
+            for (int k = 0; k < 784; k++)
+                grad.dpesos[k][m] += delta * matriz_input[j][k + 1];
+        }
+    }
+}
+
+void aplicar_gradientes(const Gradientes& grad, double tasa) {
+    for (int m = 0; m < 10; m++) {
+        bias[m] += tasa * grad.dbias[m];
+        for (int k = 0; k < 784; k++)
+            pesos[k][m] += tasa * grad.dpesos[k][m];
+    }
+}
+
+void entrenar_paralelo(const vector<vector<double>>& matriz_input,
+                       const vector<vector<int>>& matriz_clase,
+                       int epocas,
+                       double tasa,
+                       int num_hilos,
+                       int tam_lote) {
+    const int n = matriz_input.size();
+    if (num_hilos < 1) num_hilos = 1;
+
+    for (int ep = 0; ep < epocas; ep++) {
+        for (int inicio = 0; inicio < n; inicio += tam_lote) {
+            const int fin = min(inicio + tam_lote, n);
+            const int muestras = fin - inicio;
+            const int hilos_activos = min(num_hilos, muestras);
+
+            vector<Gradientes> grads(hilos_activos);
+            vector<thread> hilos;
+            hilos.reserve(hilos_activos);
+
+            for (int t = 0; t < hilos_activos; t++) {
+                const int desde = inicio + (muestras * t) / hilos_activos;
+                const int hasta = inicio + (muestras * (t + 1)) / hilos_activos;
+                hilos.emplace_back([&, desde, hasta, t]() {
+                    acumular_gradientes(desde, hasta, matriz_input, matriz_clase,
+                                        pesos, bias, grads[t]);
+                });
+            }
+            for (auto& h : hilos) h.join();
+
+            Gradientes total;
+            total.dpesos.assign(784, vector<double>(10, 0.0));
+            total.dbias.assign(10, 0.0);
+            for (const auto& g : grads) {
+                for (int m = 0; m < 10; m++) {
+                    total.dbias[m] += g.dbias[m];
+                    for (int k = 0; k < 784; k++)
+                        total.dpesos[k][m] += g.dpesos[k][m];
+                }
+            }
+            aplicar_gradientes(total, tasa);
+        }
+    }
+
+    ofstream archivo("pesos.txt");
+    for (int i = 0; i < 784; i++) {
+        for (int j = 0; j < 10; j++) {
+            archivo << pesos[i][j] << " ";
+        }
+        archivo << endl;
+    }
+    archivo.close();
+
+    ofstream archivo2("bias.txt");
+    for (int i = 0; i < 10; i++)
+        archivo2 << bias[i] << " ";
+    archivo2.close();
+}
 
 void entrenar(vector<vector<double>> matriz_input, 
              vector<vector<int>> matriz_clase,
@@ -38,7 +137,7 @@ void entrenar(vector<vector<double>> matriz_input,
             for (int m = 0; m < 10; m++) {
                 double error = matriz_clase[j][m] - y[m];
                 double delta = error * y[m] * (1.0 - y[m]);
-                bias[m] += tasa * error;
+                bias[m] += tasa * delta;
 
                 for (int k = 0; k < 784; k++)
                     pesos[k][m] += tasa * delta * matriz_input[j][k+1];
@@ -137,7 +236,14 @@ int main(){
     cout<<matriz_clase[0][0]<<endl;
     archivo.close();
 
-    entrenar(entrada_matriz,matriz_clase,5,0.001);
+    const int num_hilos = thread::hardware_concurrency();
+    const int tam_lote  = 600;  
+
+    cout << "Entrenando con " << num_hilos << " hilos, lotes de "
+         << tam_lote << " muestras..." << endl;
+
+    entrenar_paralelo(entrada_matriz, matriz_clase, 100, 0.002, num_hilos, tam_lote);
+    // entrenar(entrada_matriz, matriz_clase, 20, 0.001);  // version secuencial
 
     return 0;
 }

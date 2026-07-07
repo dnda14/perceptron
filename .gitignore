@@ -1,7 +1,12 @@
 main
+main_mlp
+main_step
+predecir
+test
+test2
+test_mlp
+test_step
 mnist_test.csv
 mnist_train.csv
 *.txt
-test
-test2
 test2.cpp

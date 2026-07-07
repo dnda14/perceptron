@@ -11,10 +11,10 @@
 using namespace std;
 
 double f_activacion(double valor){
-    return 1.0 / (1.0 + exp(-valor));
+    return (valor >= 0.0) ? 1.0 : 0.0;
 }
-vector<vector<double>> pesos(784,vector<double>(10));
 
+vector<vector<double>> pesos(784,vector<double>(10));
 vector<double> bias(10,0);
 
 struct Gradientes {
@@ -39,9 +39,14 @@ void acumular_gradientes(int desde, int hasta,
                 suma += matriz_input[j][k + 1] * pesos_loc[k][m];
             y[m] = f_activacion(suma);
         }
+        
         for (int m = 0; m < 10; m++) {
             double error = matriz_clase[j][m] - y[m];
-            double delta = error * y[m] * (1.0 - y[m]);
+            
+            // 2. CAMBIO: Regla Clásica del Perceptrón (sin derivada)
+            // En vez de: double delta = error * y[m] * (1.0 - y[m]);
+            double delta = error; 
+            
             grad.dbias[m] += delta;
             for (int k = 0; k < 784; k++)
                 grad.dpesos[k][m] += delta * matriz_input[j][k + 1];
@@ -98,9 +103,10 @@ void entrenar_paralelo(const vector<vector<double>>& matriz_input,
             }
             aplicar_gradientes(total, tasa);
         }
+        if(ep % 10 == 0) cout << "Epoca " << ep << " finalizada." << endl;
     }
 
-    ofstream archivo("pesos.txt");
+    ofstream archivo("pesos_step.txt");
     for (int i = 0; i < 784; i++) {
         for (int j = 0; j < 10; j++) {
             archivo << pesos[i][j] << " ";
@@ -109,90 +115,33 @@ void entrenar_paralelo(const vector<vector<double>>& matriz_input,
     }
     archivo.close();
 
-    ofstream archivo2("bias.txt");
+    ofstream archivo2("bias_step.txt");
     for (int i = 0; i < 10; i++)
         archivo2 << bias[i] << " ";
     archivo2.close();
+    
+    cout << "Entrenamiento completado. Guardado en pesos_step.txt y bias_step.txt" << endl;
 }
 
-void entrenar(vector<vector<double>> matriz_input, 
-             vector<vector<int>> matriz_clase,
-             int epocas, 
-             double tasa){
-    
-    for(int i=0;i<epocas;i++){
-        vector<double> y(10,0.0);
-        for (int j = 0; j < 60000; j++)
-        {
-            vector<double> total_peso_input(10,0);
-
-            for (int m = 0; m < 10; m++)
-            {
-                double suma = bias[m];
-                for (int k = 0; k < 784; k++)
-                    suma += matriz_input[j][k+1] * pesos[k][m];
-                y[m] = f_activacion(suma);
-            }
-                
-            for (int m = 0; m < 10; m++) {
-                double error = matriz_clase[j][m] - y[m];
-                double delta = error * y[m] * (1.0 - y[m]);
-                bias[m] += tasa * delta;
-
-                for (int k = 0; k < 784; k++)
-                    pesos[k][m] += tasa * delta * matriz_input[j][k+1];
-            }
-
-            
-        }
-        
-    }
-    cout<<"dsds"<<endl;
-    ofstream archivo("pesos.txt");
-    for (int i = 0; i < 784; i++)
-    {
-        for (int j = 0; j < 10; j++)
-        {
-            
-            archivo<<pesos[i][j];
-            archivo<<" ";
-        }
-        archivo<<endl;
-        
-    }
-    archivo.close();
-
-    ofstream archivo2("bias.txt");
-    for (int i = 0; i < 10; i++)
-    {
-        archivo2<<bias[i];
-        archivo2<<" ";
-    }
-    
-    archivo2.close();
-    
-    
-}
 vector<double> split(string texto, char delimitador){
     vector<double> vec;
     stringstream entrada(texto);
     string porcion;
 
     while(getline(entrada,porcion,delimitador)){
-
         vec.push_back(stoi(porcion));
-        
     }
     return vec;
 }
+
 vector<vector<int>> build_matriz_clase(int cant_clases,vector<vector<double> >entrada_matriz){
     vector<vector<int>> M(60000,vector<int>(cant_clases,0));
-    cout<<"hola"<<endl;
     for(int i=0;i<60000;i++){
         M[i][entrada_matriz[i][0]]=1;
     }
     return M;
 }
+
 vector<vector<double>> normalizar(vector<vector<double>> matriz,int offset){
     vector<vector<double>> matriz_norma(matriz.size(),vector<double>(matriz[0].size(),0));
     for (int i = 0; i < matriz.size(); i++)
@@ -203,11 +152,10 @@ vector<vector<double>> normalizar(vector<vector<double>> matriz,int offset){
             if(matriz[i][j]>0)
                 matriz_norma[i][j] = matriz[i][j]/256;
         }
-        
     }
     return matriz_norma;
-    
 }
+
 int main(){
     srand(time(0));
 
@@ -217,33 +165,30 @@ int main(){
         }
     }
     for(int j=0; j<10; j++) {
-            bias[j]= (double)(rand() % 1000) / 50000.0; 
-        }
+        bias[j]= (double)(rand() % 1000) / 50000.0; 
+    }
 
+    cout << "Cargando mnist_train.csv..." << endl;
     ifstream archivo("mnist_train.csv");
     string linea;
 
     vector<vector<double>> entrada_matriz;
     while (getline(archivo,linea)){
-        //texto.erase(remove(texto.begin(), texto.end(), ','), texto.end());
         vector<double> vec_num = split(linea,',');
-        int sz = vec_num.size();
         entrada_matriz.push_back(vec_num);
-        
     }
+    archivo.close();
+    cout << "Normalizando..." << endl;
     entrada_matriz = normalizar(entrada_matriz,1);
     vector<vector<int>> matriz_clase = build_matriz_clase(10,entrada_matriz);
-    cout<<matriz_clase[0][0]<<endl;
-    archivo.close();
 
     const int num_hilos = thread::hardware_concurrency();
     const int tam_lote  = 600;  
 
     cout << "Entrenando con " << num_hilos << " hilos, lotes de "
          << tam_lote << " muestras..." << endl;
-    //promedio de gradientes por lote
-    entrenar_paralelo(entrada_matriz, matriz_clase, 1000, 0.002, num_hilos, tam_lote);
-    //entrenar(entrada_matriz, matriz_clase, 50, 0.002);  // version secuencial
+         
+    entrenar_paralelo(entrada_matriz, matriz_clase, 50, 0.01, num_hilos, tam_lote);
 
     return 0;
 }
